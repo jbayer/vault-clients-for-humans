@@ -44,7 +44,13 @@ function get_namespace() {
       --header "X-Vault-Token: $VAULT_TOKEN" \
       -X LIST \
       $VAULT_ADDR/v1/sys/namespaces | jq . > namespaces.json
-    
+
+    if $(jq 'has("errors")' namespaces.json); then
+      echo "Error calling $VAULT_ADDR/v1/sys/namespaces"
+      cat namespaces.json
+      exit 1;
+    fi
+
     echo $(jq -r ".data.key_info | to_entries | .[] | select(.value.id == \"$namespace_id\") | .value.path" namespaces.json)
 }
 
@@ -54,6 +60,12 @@ function get_auth_method() {
       --header "X-Vault-Token: $VAULT_TOKEN" \
       --header "X-Vault-Namespace: $namespace_path" \
       $VAULT_ADDR/v1/identity/entity/id/$client_id | jq . > entity.json
+
+    if $(jq 'has("errors")' entity.json); then
+      echo "Error calling $VAULT_ADDR/v1/identity/entity/id/$client_id"
+      cat entity.json
+      exit 1;
+    fi
 
     jq ".data.aliases[] | select(.mount_accessor == \"$2\")" entity.json > auth.json
 }
@@ -89,6 +101,12 @@ curl -sS \
     --header "X-Vault-Token: $VAULT_TOKEN" \
     --request GET \
     "$VAULT_ADDR/v1/sys/internal/counters/activity/export?start_time=$start_time&end_time=$end_time&format=json" | jq . > clients-no-array.json
+
+if $(jq 'has("errors")' clients-no-array.json); then
+  echo "Error calling $VAULT_ADDR/v1/sys/internal/counters/activity/export"
+  cat clients-no-array.json
+  exit 1;
+fi
 
 client_id=""
 mount_accessor=""
