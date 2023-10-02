@@ -3,14 +3,14 @@
 # This script calls the Vault Activity Export API 
 # to count Vault clients for a particular date range
 # and add human-readable attributes to the values
-# Must have $VAULT_ADDR and $VAULT_TOKEN
-# Must pass in a start date as YYYY-MM-DD
-# Must pass in an end date as YYYY-MM-DD
+# Must set $VAULT_ADDR and $VAULT_TOKEN
+# Must provide a start date argument as YYYY-MM-DD
+# Must provide an end date argument as YYYY-MM-DD
 # usage: human-readable-clients.sh 2023-09-01 2023-10-01
 # should return json elements for each client in the date range
 
 set -e
-trap 'echo "An error occurred. Exiting."; exit 1' ERR
+trap 'echo "An error occurred. Check json files for errors. Exiting."; exit 1' ERR
 
 # Define a list of environment variables to check
 variables_to_check=("VAULT_ADDR" "VAULT_TOKEN")
@@ -103,6 +103,7 @@ size=$(jq 'length' clients.json)
 
 # for each client
 for ((i=0; i<$size; i++)); do
+
     #reset attribute variables from prior loop iterations
     clear_attributes
 
@@ -121,6 +122,14 @@ for ((i=0; i<$size; i++)); do
     #get the namespace info
     namespace_id=$(jq -r ".namespace_id" client.json)
     namespace_path=""
+    if [ "$namespace_id" == "root" ]; then
+        namespace_path=""
+    else
+        # get the human readable namespace path
+        namespace_path=$(get_namespace $namespace_id)
+    fi
+
+    # non-entity tokens do not have additional entity attributes available
     if [ "$client_type" == "non-entity-token" ]; then
       # if this is a non-entity token, print out limited info
       jq ". + {\"timestamp_human\": \"$timestamp_human\"} \
@@ -128,11 +137,6 @@ for ((i=0; i<$size; i++)); do
         + {\"mount_type\": \"token\"} \
         | to_entries | sort_by(.key) | from_entries " client.json
       continue
-    elif [ "$namespace_id" == "root" ]; then
-        namespace_path=""
-    else
-        # get the human readable namespace path
-        namespace_path=$(get_namespace $namespace_id)
     fi
 
     # get human readable attributes from the entity alias that matches the mount_path into auth.json
