@@ -71,27 +71,44 @@ function get_auth_method() {
 }
 
 function date_to_epoch() {
-  # Check if an argument is provided
-  if [[ -z "$1" ]]; then
-      echo "Usage: $0 'YYYY-MM-DD'"
+  # Get the human-readable date from the arguments
+  human_date="$*"
+
+  if [[ -z "$human_date" ]]; then
+      echo "Usage: date_to_epoch 2023-09-01"
       exit 1
   fi
 
-  cmd="date"
-  args=()
-  # Check for GNU date
-  if date --version &> /dev/null; then   
-    args+=("-d")
-  # Assume BSD date
+  # Check if date supports the GNU/Linux style invocation
+  if date --version &>/dev/null; then
+      # GNU/Linux style
+      date -d "$human_date" +%s
   else
-    args+=("-jf" "%Y-%m-%d")
+      # macOS (BSD) style
+    date -jf "%Y-%m-%d" "$human_date" +%s 2>/dev/null || \
+    date -jf "%a %b %d %T %Z %Y" "$human_date" +%s 2>/dev/null || \
+    date -jf "%Y-%m-%d %H:%M:%S" "$human_date" +%s  
   fi
-
-  args+=("$1" "+%s")
-
-  "$cmd" "${args[@]}"
 }
 
+function epoch_to_date() {
+  # Get the epoch timestamp from the argument
+  epoch_timestamp="$1"
+
+  if [[ -z "$epoch_timestamp" ]]; then
+      echo "Usage: epoch_to_date 1234567890"
+      exit 1
+  fi
+
+  # Check if date supports the GNU/Linux style invocation
+  if date --version &>/dev/null; then
+      # GNU/Linux style
+      date -d "@$epoch_timestamp"
+  else
+      # macOS (BSD) style
+      date -r "$epoch_timestamp"
+  fi
+}
 start_time=$(date_to_epoch $1)
 end_time=$(date_to_epoch $2)
 
@@ -131,7 +148,7 @@ for ((i=0; i<$size; i++)); do
     #get the timestamp
     timestamp=$(jq -r ".timestamp" client.json)
     #convert timestamp to human readable
-    timestamp_human=$(date -r $timestamp)
+    timestamp_human=$(epoch_to_date $timestamp)
     #read other machine identity attributes
     client_id=$(jq -r ".client_id" client.json)
     client_type=$(jq -r ".client_type" client.json)
