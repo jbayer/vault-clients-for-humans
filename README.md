@@ -58,8 +58,9 @@ This is a bash script that uses `curl`, `jq`, and `bash` to supplement the [Vaul
 * curl
 * The Vault environment variables `VAULT_ADDR` and `VAULT_TOKEN` are set
 * The token has Vault policy that enables it to call several Vault APIs at /sys
-* argument1 is start date expressed as YYYY-MM-dd
-* argument2 is end date expressed as YYYY-MM-dd
+* argument1 is start date expressed as YYYY-MM-DD
+* argument2 is end date expressed as YYYY-MM-DD
+* The script user can write json files to the current working directory
 
 ## Activity Export API Example
 The Acitivity Export API data by itself only returns machine identifiers. 
