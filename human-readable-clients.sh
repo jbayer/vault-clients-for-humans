@@ -38,8 +38,7 @@ function clear_attributes() {
   auth_name=""
 }
 
-function get_namespace() {
-    local namespace_id="$1"
+function init_namespaces_file() {
     curl -sS \
       --header "X-Vault-Token: $VAULT_TOKEN" \
       -X LIST \
@@ -50,7 +49,46 @@ function get_namespace() {
       cat namespaces.json
       exit 1;
     fi
+}
 
+function init_clients_file() {
+  # call the activity export api and save it to a file
+  # use https://unixtime.org/ to get the appropriate epoch values
+  curl -sS \
+      --header "X-Vault-Token: $VAULT_TOKEN" \
+      --request GET \
+      "$VAULT_ADDR/v1/sys/internal/counters/activity/export?start_time=$1&end_time=$2&format=json" | jq . > clients-no-array.json
+
+  if $(jq 'has("errors")' clients-no-array.json); then
+    echo "Error calling $VAULT_ADDR/v1/sys/internal/counters/activity/export"
+    cat clients-no-array.json
+    exit 1;
+  fi
+}
+
+function init_entity_lookup_file() {
+  # use the lookup api to get metadata, group, and policy info
+  echo "{\"id\": \"$1\" }" > lookup.json
+
+  # call the entity lookup api and save it to a file
+  curl -sS \
+      --header "X-Vault-Token: $VAULT_TOKEN" \
+      --header "X-Vault-Namespace: $namespace_path" \
+      --request POST \
+      --data @lookup.json \
+      $VAULT_ADDR/v1/identity/lookup/entity | jq . > lookup_result.json
+
+  if $(jq 'has("errors")' lookup_result.json); then
+    echo "Error calling entity lookup api"
+    cat lookup_result.json
+    exit 1;
+  fi
+}
+
+
+
+function get_namespace() {
+    local namespace_id="$1"
     echo $(jq -r ".data.key_info | to_entries | .[] | select(.value.id == \"$namespace_id\") | .value.path" namespaces.json)
 }
 
@@ -109,22 +147,8 @@ function epoch_to_date() {
       date -r "$epoch_timestamp"
   fi
 }
-start_time=$(date_to_epoch $1)
-end_time=$(date_to_epoch $2)
 
-# call the activity export api and save it to a file
-# use https://unixtime.org/ to get the appropriate epoch values
-curl -sS \
-    --header "X-Vault-Token: $VAULT_TOKEN" \
-    --request GET \
-    "$VAULT_ADDR/v1/sys/internal/counters/activity/export?start_time=$start_time&end_time=$end_time&format=json" | jq . > clients-no-array.json
-
-if $(jq 'has("errors")' clients-no-array.json); then
-  echo "Error calling $VAULT_ADDR/v1/sys/internal/counters/activity/export"
-  cat clients-no-array.json
-  exit 1;
-fi
-
+# init all variables to empty state
 client_id=""
 mount_accessor=""
 mount_path=""
@@ -132,29 +156,37 @@ mount_type=""
 namespace_path=""
 auth_name=""
 
-# make the separate json elements file into a json array
+# get the active clients in a date range and save it to clients-no-array.json
+start_time=$(date_to_epoch $1)
+end_time=$(date_to_epoch $2)
+init_clients_file $start_time $end_time
+
+# make the separate json elements from clients-no-array.json into a json array in clients.json
 jq -s '.' clients-no-array.json > clients.json
 size=$(jq 'length' clients.json)
 
-# for each client
+# create a namespaces.json file
+init_namespaces_file
+
+# for each client in the clients 
 for ((i=0; i<$size; i++)); do
 
-    #reset attribute variables from prior loop iterations
+    # reset attribute variables from prior loop iterations
     clear_attributes
 
-    #write the current client to client.json
+    # write the current client to client.json
     jq ".[$i] | ." clients.json > client.json
 
-    #get the timestamp
+    # get the timestamp
     timestamp=$(jq -r ".timestamp" client.json)
-    #convert timestamp to human readable
+    # convert timestamp to human readable
     timestamp_human=$(epoch_to_date $timestamp)
-    #read other machine identity attributes
+    # read other machine identity attributes
     client_id=$(jq -r ".client_id" client.json)
     client_type=$(jq -r ".client_type" client.json)
     mount_accessor=$(jq -r ".mount_accessor" client.json)
 
-    #get the namespace info
+    # get the namespace info
     namespace_id=$(jq -r ".namespace_id" client.json)
     namespace_path=""
     if [ "$namespace_id" == "root" ]; then
@@ -180,13 +212,19 @@ for ((i=0; i<$size; i++)); do
     mount_path=$(jq -r ".mount_path" auth.json)
     mount_type=$(jq -r ".mount_type" auth.json)
     auth_name=$(jq -r ".name" auth.json)
+    role_name=$(jq -r ".metadata.role_name" auth.json)
 
-    #print the element with new attributes sorted alphabetically
+    init_entity_lookup_file $client_id
+    lookup=$(jq '.data | {metadata: .metadata, group_ids: .group_ids, policies: .policies}' lookup_result.json)
+
+    # print the element with new attributes sorted alphabetically
     jq ". + {\"timestamp_human\": \"$timestamp_human\"} \
       + {\"namespace_path\": \"$namespace_path\"} \
       + {\"mount_path\": \"$mount_path\"} \
       + {\"mount_type\": \"$mount_type\"} \
       + {\"auth_name\": \"$auth_name\"} \
+      + {\"role_name\": \"$role_name\"} \
+      + $lookup \
       | to_entries | sort_by(.key) | from_entries " client.json
     
 done
