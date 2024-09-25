@@ -1,5 +1,5 @@
 # vault-clients-for-humans
-This is a bash script that uses `curl`, `jq`, and `bash` to supplement the [Vault Activity Export API]([url](https://developer.hashicorp.com/vault/api-docs/system/internal-counters#activity-export)https://developer.hashicorp.com/vault/api-docs/system/internal-counters#activity-export). The API will return machine identities for each Vault Client that contributes to the data range provided. These client identifiers are machine identities and this script will call the Vault Entity API and Vault Entity Lookup API to supplement the data with human-readable attributes.
+This is a bash script that uses `curl`, `jq`, and `bash` to supplement the [Vault Activity Export API]([url](https://developer.hashicorp.com/vault/api-docs/system/internal-counters#activity-export)https://developer.hashicorp.com/vault/api-docs/system/internal-counters#activity-export) (Versions 1.17.x and prior. The Vault 1.18 Activity Export API has similar data in the standard response that this script helps with). The API will return machine identities for each Vault Client that contributes to the data range provided. These client identifiers are machine identities and this script will call the Vault Entity API and Vault Entity Lookup API to supplement the data with human-readable attributes.
 
 ## Example Usage
 ```shell
